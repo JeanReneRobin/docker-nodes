@@ -2,6 +2,8 @@
 
 TXTRED=$(tput setaf 1)
 TXTGREEN=$(tput setaf 2)
+TXTYELLOW=$(tput setaf 3)
+TXTBLUE=$(tput setaf 4)
 TXTBOLD=$(tput bold)
 TXTNORMAL=$(tput sgr0)
     
@@ -24,11 +26,6 @@ function is_binary_present {
      fi
 }
 
-function start {
-    create_containers
-    docker exec --user ansible -w /home/ansible/workdir/ -it ansible bash -l
-}
-
 function stop_containers {
     for container in ansible node1 node2 node3; do
         if container_exists $container; then
@@ -36,14 +33,6 @@ function stop_containers {
             display_message "Stop $container" $?
         fi
     done
-}
-
-function create_containers {
-    download_images
-    create_network ansible101 10.0.101.0/24
-    create_container node1 10.0.101.10 nanio/ansible101:node
-    create_container node2 10.0.101.20 nanio/ansible101:node
-    create_container node3 10.0.101.30 nanio/ansible101:node
 }
 
 function create_network {
@@ -64,8 +53,8 @@ function create_container {
     container_image=$3
     container_id="$(docker ps -a -q -f name=${container_name})"
     if [[ $container_id == "" ]]; then
-        docker run -d -h "${container_name}" --name "${container_name}" --net ansible101 --ip "${container_ip}" --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro "${container_image}" >/dev/null 2>&1
-        display_message "Creating $container_name" $?
+        docker run -d -h "${container_name}" --name "${container_name}" --net poppernetwork --ip "${container_ip}" --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro "${container_image}" >/dev/null 2>&1
+        display_message "Creating $container_name - $2" $?
     else
         is_running=$(docker inspect -f '{{.State.Running}}' $container_id)
         if [[ "$is_running" == "false" ]]; then
@@ -88,49 +77,88 @@ function container_exists {
 }
 
 function download_images {
-    docker pull $1 >/dev/null 2>&1
-    display_message "Nodes images downloaded" $?
+    if [[ "$(docker images -q $1 2> /dev/null)" == "" ]]; then
+        # do something
+        display_message "Nodes image already pulled"
+    else
+        docker pull $1 >/dev/null 2>&1
+        display_message "Nodes image downloaded" $?
+    fi
 }
 
 function delete_containers {
+
+    if [ -f "/etc/ansible/inventory/docker-nodes-popper.inventory" ]
+    then 
+        rm /etc/ansible/inventory/docker-nodes-popper.inventory
+        display_message "Delete ansible inventory file" $?
+    fi 
+    
     for i in $(eval echo "{0..25}"); do
         if container_exists node$i; then
             docker rm --force node$i >/dev/null 2>&1
-            display_message "Delete de node$i" $?
+            display_message "Delete node$i" $?
         fi
     done
-    NETWORK=$(docker network ls | grep nodes-network)
+    NETWORK=$(docker network ls | grep poppernetwork)
     if [[ "$NETWORK" != "" ]]; then
-        docker network rm ansible101 >/dev/null 2>&1
+        docker network rm poppernetwork >/dev/null 2>&1
         display_message "Delete network" $?
     fi
 }
 
 function pop {
-    echo "Creating $1 nodes using $2 image"
+    IMAGE=$2
+    if [ -z $IMAGE ]; then 
+        IMAGE="nanio/ansible101:node"
+    fi
 
-    download_images $2
-    create_network $1-nodes-network 10.0.101.0/24 
+    download_images $IMAGE
+    create_network poppernetwork 10.0.101.0/24 
 
-    for i in $(eval echo "{0..$1}") 
+    for i in $(eval echo "{1..$1}") 
     do
-        if [ "$i < 25" ]; then
-            create_container node$i 10.0.101.${i}0 $2
+        if [ "$i" -gt 25 ]
+        then
+            echo -e "[${TXTBOLD}${TXTYELLOW}!!${TXTNORMAL}] - 25 containers maximum"
+            exit
+        else
+            create_container node$i 10.0.101.${i}0 $IMAGE
+            create_user node$i
+            echo "node$i ansible_host=10.0.101.${i}0" >> /etc/ansible/inventory/docker-nodes-popper.inventory
         fi
     done
 }
 
-function show_help_header {
-    echo "Description:
-  A shell script used to deploy and manage local docker containers, for educational purposes.
-"
+function create_user {
+    docker exec -it $1 adduser --disabled-password --gecos "" $USER >/dev/null
+    docker exec -i $1 /bin/bash -c 'mkdir -p /home/'$USER'/.ssh'
+    cat ~/.ssh/id_rsa.pub |  docker exec -i $1 /bin/bash -c 'cat >> /home/'$USER'/.ssh/authorized_keys'
+    docker exec -i $1 /bin/bash -c 'chown -R '$USER': /home/'$USER'/'
+
+    IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $1)
+    ssh -q $IP_ADDRESS exit
+    display_message "Deploying SSH key" $?
+}
+
+function show_title {
+    echo -e "${TXTBOLD}${TXTBLUE}docker-nodes${TXTNORMAL}
+    "
+}
+
+function show_description {
+
+    echo -e "${TXTBOLD}${TXTYELLOW}Description:${TXTNORMAL}"
+    echo "  A shell script used to deploy and manage local docker containers, for educational purposes.
+    "
 }
 
 function show_help {
-    echo "Usage:
-  ./docker-nodes-spawner [command] [options]
+    echo -e "${TXTBOLD}${TXTYELLOW}Usage:${TXTNORMAL}"
+    echo "  ./docker-nodes-spawner [command] [options]
+    "
 
-Available Commands:
+    echo -e "${TXTBOLD}${TXTYELLOW}Available Commands:${TXTNORMAL}
   help        		Dispaly this message
   pop [n] [i]      	Deploy n containers using i image. 25 nodes maximum. 
   download    		Download dockers images
@@ -142,8 +170,10 @@ is_binary_present docker
 
 ACTION="$1"
 
+show_title
+
 if [[ -z "$ACTION" || "$ACTION" == "help" ]]; then
-    show_help_header
+    show_description
     show_help
 elif [[ "$ACTION" == "pop" ]]; then
     pop ${@:2}
