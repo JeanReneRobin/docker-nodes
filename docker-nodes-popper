@@ -1,0 +1,161 @@
+#!/bin/bash
+
+TXTRED=$(tput setaf 1)
+TXTGREEN=$(tput setaf 2)
+TXTBOLD=$(tput bold)
+TXTNORMAL=$(tput sgr0)
+    
+function display_message {
+    MSG="$1"
+    STATE="$2"
+    if [[ "$2" == "0" ]]; then
+        DISPLAY="[${TXTBOLD}${TXTGREEN}OK${TXTNORMAL}] - $MSG"
+    else
+        DISPLAY="[${TXTBOLD}${TXTRED}KO${TXTNORMAL}] - $MSG"
+    fi
+    echo -e "${DISPLAY}"
+}
+
+function is_binary_present {
+    which $1 >/dev/null 2>&1
+    if [[ "$?" != "0" ]]; then
+        echo "Command $1 is missing"
+        exit 1
+     fi
+}
+
+function start {
+    create_containers
+    docker exec --user ansible -w /home/ansible/workdir/ -it ansible bash -l
+}
+
+function stop_containers {
+    for container in ansible node1 node2 node3; do
+        if container_exists $container; then
+            docker stop $container >/dev/null 2>&1
+            display_message "Stop $container" $?
+        fi
+    done
+}
+
+function create_containers {
+    download_images
+    create_network ansible101 10.0.101.0/24
+    create_container node1 10.0.101.10 nanio/ansible101:node
+    create_container node2 10.0.101.20 nanio/ansible101:node
+    create_container node3 10.0.101.30 nanio/ansible101:node
+}
+
+function create_network {
+    network_name=$1
+    network_subnet=$2
+    docker network inspect ${network_name} >/dev/null 2>&1
+    if [[ "$?" != "0" ]]; then
+        docker network create --subnet="${network_subnet}" "${network_name}" >/dev/null 2>&1
+        display_message "Setting up network $network_name" $?
+    else
+        display_message "Network ${network_name} already exist" 0
+    fi
+}
+
+function create_container {
+    container_name=$1
+    container_ip=$2
+    container_image=$3
+    container_id="$(docker ps -a -q -f name=${container_name})"
+    if [[ $container_id == "" ]]; then
+        docker run -d -h "${container_name}" --name "${container_name}" --net ansible101 --ip "${container_ip}" --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro "${container_image}" >/dev/null 2>&1
+        display_message "Creating $container_name" $?
+    else
+        is_running=$(docker inspect -f '{{.State.Running}}' $container_id)
+        if [[ "$is_running" == "false" ]]; then
+            docker start ${container_id} >/dev/null 2>&1
+            display_message "Starting up $container_name" $?
+        else
+            display_message "Container ${container_name} already exist" 0
+        fi
+    fi
+}
+
+function container_exists {
+    container_name=$1
+    container_id=$(docker ps -a -q -f name=${container_name})
+    if [[ $container_id == "" ]]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+function download_images {
+    docker pull $1 >/dev/null 2>&1
+    display_message "Nodes images downloaded" $?
+}
+
+function delete_containers {
+    for i in $(eval echo "{0..25}"); do
+        if container_exists node$i; then
+            docker rm --force node$i >/dev/null 2>&1
+            display_message "Delete de node$i" $?
+        fi
+    done
+    NETWORK=$(docker network ls | grep nodes-network)
+    if [[ "$NETWORK" != "" ]]; then
+        docker network rm ansible101 >/dev/null 2>&1
+        display_message "Delete network" $?
+    fi
+}
+
+function pop {
+    echo "Creating $1 nodes using $2 image"
+
+    download_images $2
+    create_network $1-nodes-network 10.0.101.0/24 
+
+    for i in $(eval echo "{0..$1}") 
+    do
+        if [ "$i < 25" ]; then
+            create_container node$i 10.0.101.${i}0 $2
+        fi
+    done
+}
+
+function show_help_header {
+    echo "Description:
+  A shell script used to deploy and manage local docker containers, for educational purposes.
+"
+}
+
+function show_help {
+    echo "Usage:
+  ./docker-nodes-spawner [command] [options]
+
+Available Commands:
+  help        		Dispaly this message
+  pop [n] [i]      	Deploy n containers using i image. 25 nodes maximum. 
+  download    		Download dockers images
+  delete      		Delete containers
+  stop        		Exit and clean existing environnement"
+}
+
+is_binary_present docker
+
+ACTION="$1"
+
+if [[ -z "$ACTION" || "$ACTION" == "help" ]]; then
+    show_help_header
+    show_help
+elif [[ "$ACTION" == "pop" ]]; then
+    pop ${@:2}
+elif [[ "$ACTION" == "delete" ]]; then
+    delete_containers
+elif [[ "$ACTION" == "stop" ]]; then
+    stop_containers
+elif [[ "$ACTION" == "download" ]]; then
+    download_images
+else
+    echo -e "Error : $ACTION command is not supported\n"
+    show_help
+fi
+
+exit 0
