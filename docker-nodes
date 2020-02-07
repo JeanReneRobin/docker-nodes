@@ -149,7 +149,7 @@ function show_title {
 function show_description {
 
     echo -e "${TXTBOLD}${TXTYELLOW}Description:${TXTNORMAL}"
-    echo "  A shell script used to deploy and manage local docker containers, for educational purposes.
+    echo "  A shell script used to deploy and manage local docker containers.
     "
 }
 
