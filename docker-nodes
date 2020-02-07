@@ -77,20 +77,15 @@ function container_exists {
 }
 
 function download_images {
-    if [[ "$(docker images -q $1 2> /dev/null)" == "" ]]; then
-        # do something
-        display_message "Nodes image already pulled"
-    else
-        docker pull $1 >/dev/null 2>&1
-        display_message "Nodes image downloaded" $?
-    fi
+    docker pull $1 >/dev/null 2>&1
+    display_message "Nodes image downloaded" $?
 }
 
 function delete_containers {
 
-    if [ -f "/etc/ansible/inventory/docker-nodes-popper.inventory" ]
+    if [ -f "/etc/ansible/inventory/docker-nodes.inventory" ]
     then 
-        rm /etc/ansible/inventory/docker-nodes-popper.inventory
+        rm /etc/ansible/inventory/docker-nodes.inventory
         display_message "Delete ansible inventory file" $?
     fi 
     
@@ -125,16 +120,18 @@ function pop {
         else
             create_container node$i 10.0.101.${i}0 $IMAGE
             create_user node$i
-            echo "node$i ansible_host=10.0.101.${i}0" >> /etc/ansible/inventory/docker-nodes-popper.inventory
+            echo "node$i ansible_host=10.0.101.${i}0 ansible_python_interpreter=/usr/bin/python3" >> /etc/ansible/inventory/docker-nodes.inventory
         fi
     done
 }
 
 function create_user {
     docker exec -it $1 adduser --disabled-password --gecos "" $USER >/dev/null
+    docker exec -it $1 usermod -aG sudo $USER
     docker exec -i $1 /bin/bash -c 'mkdir -p /home/'$USER'/.ssh'
     cat ~/.ssh/id_rsa.pub |  docker exec -i $1 /bin/bash -c 'cat >> /home/'$USER'/.ssh/authorized_keys'
     docker exec -i $1 /bin/bash -c 'chown -R '$USER': /home/'$USER'/'
+    echo "$USER ALL = (ALL) NOPASSWD: ALL" | docker exec -i $1 /bin/bash -c 'cat >> /etc/sudoers'
 
     IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $1)
     ssh -q $IP_ADDRESS exit
