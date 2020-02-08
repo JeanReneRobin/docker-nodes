@@ -1,4 +1,4 @@
-# docker-sandbox
+# docker-nodes
 A shell script used to deploy and manage local docker containers.
 
 ```shell
@@ -8,7 +8,7 @@ Description:
   A shell script used to deploy and manage local docker containers.
     
 Usage:
-  ./docker-nodes-spawner [command] [options]
+  ./docker-nodes [command] [options]
     
 Available Commands:
   help        		Dispaly this message
