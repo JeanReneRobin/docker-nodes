@@ -17,3 +17,6 @@ Available Commands:
   delete      		Delete containers
   stop        		Exit and clean existing environnement
 ```
+
+### Credits
+https://github.com/Nani-o/ansible101
