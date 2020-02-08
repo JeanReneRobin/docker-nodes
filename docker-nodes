@@ -66,6 +66,10 @@ function create_container {
     fi
 }
 
+function list {
+    docker ps --format '{{.Names}}\t{{.Image}}' | grep node
+}
+
 function container_exists {
     container_name=$1
     container_id=$(docker ps -a -q -f name=${container_name})
@@ -152,12 +156,13 @@ function show_description {
 
 function show_help {
     echo -e "${TXTBOLD}${TXTYELLOW}Usage:${TXTNORMAL}"
-    echo "  ./docker-nodes-spawner [command] [options]
+    echo "  ./docker-nodes [command] [options]
     "
 
     echo -e "${TXTBOLD}${TXTYELLOW}Available Commands:${TXTNORMAL}
   help        		Dispaly this message
   pop [n] [i]      	Deploy n containers using i image. 25 nodes maximum. 
+  list                  List containers managed by docker-nodes
   download    		Download dockers images
   delete      		Delete containers
   stop        		Exit and clean existing environnement"
@@ -174,6 +179,8 @@ if [[ -z "$ACTION" || "$ACTION" == "help" ]]; then
     show_help
 elif [[ "$ACTION" == "pop" ]]; then
     pop ${@:2}
+elif [[ "$ACTION" == "list" ]]; then
+    list
 elif [[ "$ACTION" == "delete" ]]; then
     delete_containers
 elif [[ "$ACTION" == "stop" ]]; then
