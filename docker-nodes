@@ -6,6 +6,8 @@ TXTYELLOW=$(tput setaf 3)
 TXTBLUE=$(tput setaf 4)
 TXTBOLD=$(tput bold)
 TXTNORMAL=$(tput sgr0)
+
+DEFAULT_IMAGE='mabihan/ansible-node:latest'
     
 function display_message {
     MSG="$1"
@@ -67,7 +69,13 @@ function create_container {
 }
 
 function list {
-    docker ps --format '{{.Names}}\t{{.Image}}' | grep node
+    NUMBER=$(docker ps --format '{{.Names}}\t{{.Image}}' | grep node | wc -l);
+    if [[ "$NUMBER" == "0" ]]; then
+        echo -e "${TXTBOLD}${TXTYELLOW}$NUMBER nodes found${TXTNORMAL}"
+    else
+        echo -e "${TXTBOLD}${TXTGREEN}$NUMBER nodes found${TXTNORMAL}"
+        docker ps --format '{{.Names}}\t{{.Image}}' | grep node
+    fi
 }
 
 function container_exists {
@@ -81,8 +89,19 @@ function container_exists {
 }
 
 function download_images {
-    docker pull $1 >/dev/null 2>&1
-    display_message "Nodes image downloaded" $?
+    IMAGE=$(docker image ls | grep $1)
+
+    if [[ "$IMAGE" != "" ]]; then
+        echo -e "[${TXTBOLD}${TXTGREEN}OK${TXTNORMAL}] - Nodes image already downloaded"
+    else 
+        docker pull $1 >/dev/null 2>&1
+        RESULT=$?
+        display_message "Nodes image downloaded" $RESULT
+
+        if [[ "$RESULT" != "" ]]; then
+            exit 1
+        fi
+    fi
 }
 
 function delete_containers {
@@ -109,7 +128,7 @@ function delete_containers {
 function pop {
     IMAGE=$2
     if [ -z $IMAGE ]; then 
-        IMAGE="nanio/ansible101:node"
+        IMAGE=$DEFAULT_IMAGE
     fi
 
     download_images $IMAGE
@@ -142,6 +161,11 @@ function create_user {
     display_message "Deploying SSH key" $?
 }
 
+function attach_node {
+    IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $1)
+    ssh $IP_ADDRESS
+}
+
 function show_title {
     echo -e "${TXTBOLD}${TXTBLUE}docker-nodes${TXTNORMAL}
     "
@@ -150,7 +174,8 @@ function show_title {
 function show_description {
 
     echo -e "${TXTBOLD}${TXTYELLOW}Description:${TXTNORMAL}"
-    echo "  A shell script used to deploy and manage local docker containers.
+    echo "  A shell script used to deploy and manage local docker containers."
+    echo -e "  Default image : ${TXTBOLD}${TXTBLUE}$DEFAULT_IMAGE${TXTNORMAL}
     "
 }
 
@@ -161,7 +186,8 @@ function show_help {
 
     echo -e "${TXTBOLD}${TXTYELLOW}Available Commands:${TXTNORMAL}
   help        		Dispaly this message
-  pop [n] [i]      	Deploy n containers using i image. 25 nodes maximum. 
+  pop [n] [i]      	Deploy n containers using i image. 25 nodes maximum.
+  attach [node]         Connect to a node shell
   list                  List containers managed by docker-nodes
   download    		Download dockers images
   delete      		Delete containers
@@ -172,13 +198,13 @@ is_binary_present docker
 
 ACTION="$1"
 
-show_title
-
 if [[ -z "$ACTION" || "$ACTION" == "help" ]]; then
     show_description
     show_help
 elif [[ "$ACTION" == "pop" ]]; then
     pop ${@:2}
+elif [[ "$ACTION" == "attach" ]]; then
+    attach_node $2
 elif [[ "$ACTION" == "list" ]]; then
     list
 elif [[ "$ACTION" == "delete" ]]; then
