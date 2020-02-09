@@ -1,14 +1,14 @@
-# docker-nodes
+# ansible-nodes
 A shell script used to deploy and manage local docker containers.
 
 ```shell
-docker-nodes
+ansible-nodes
     
 Description:
-  A shell script used to deploy and manage local docker containers.
+  A shell script used to deploy and manage local docker containers and network.
     
 Usage:
-  ./docker-nodes [command] [options]
+  ./ansible-nodes [command] [options]
     
 Available Commands:
   help        		Dispaly this message
