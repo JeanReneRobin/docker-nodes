@@ -7,7 +7,7 @@ TXTBLUE=$(tput setaf 4)
 TXTBOLD=$(tput bold)
 TXTNORMAL=$(tput sgr0)
 
-DEFAULT_IMAGE='mabihan/ansible-node:latest'
+DEFAULT_IMAGE='mabihan/docker-ubuntu1804-ansible:latest'
     
 function display_message {
     MSG="$1"
@@ -55,7 +55,7 @@ function create_container {
     container_image=$3
     container_id="$(docker ps -a -q -f name=${container_name})"
     if [[ $container_id == "" ]]; then
-        docker run -d -h "${container_name}" --name "${container_name}" --net poppernetwork --ip "${container_ip}" --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro "${container_image}" >/dev/null 2>&1
+        docker run -d -h "${container_name}" --name "${container_name}" --net ansiblenodesnetwork --ip "${container_ip}" --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro "${container_image}" >/dev/null 2>&1
         display_message "Creating $container_name - $2" $?
     else
         is_running=$(docker inspect -f '{{.State.Running}}' $container_id)
@@ -74,7 +74,7 @@ function list {
         echo -e "${TXTBOLD}${TXTYELLOW}$NUMBER nodes found${TXTNORMAL}"
     else
         echo -e "${TXTBOLD}${TXTGREEN}$NUMBER nodes found${TXTNORMAL}"
-        docker ps --format '{{.Names}}\t{{.Image}}' | grep node
+        docker inspect --format='{{.Name}}    {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(sudo docker ps -aq) | grep node | cut -c 2-
     fi
 }
 
@@ -89,19 +89,8 @@ function container_exists {
 }
 
 function download_images {
-    IMAGE=$(docker image ls | grep $1)
-
-    if [[ "$IMAGE" != "" ]]; then
-        echo -e "[${TXTBOLD}${TXTGREEN}OK${TXTNORMAL}] - Nodes image already downloaded"
-    else 
-        docker pull $1 >/dev/null 2>&1
-        RESULT=$?
-        display_message "Nodes image downloaded" $RESULT
-
-        if [[ "$RESULT" != "" ]]; then
-            exit 1
-        fi
-    fi
+    docker pull $1 >/dev/null 2>&1
+    display_message "Nodes image downloaded" $RESULT
 }
 
 function delete_containers {
@@ -118,9 +107,9 @@ function delete_containers {
             display_message "Delete node$i" $?
         fi
     done
-    NETWORK=$(docker network ls | grep poppernetwork)
+    NETWORK=$(docker network ls | grep ansiblenodesnetwork)
     if [[ "$NETWORK" != "" ]]; then
-        docker network rm poppernetwork >/dev/null 2>&1
+        docker network rm ansiblenodesnetwork >/dev/null 2>&1
         display_message "Delete network" $?
     fi
 }
@@ -128,11 +117,11 @@ function delete_containers {
 function pop {
     IMAGE=$2
     if [ -z $IMAGE ]; then 
-        IMAGE=$DEFAULT_IMAGE
+        IMAGE=$DEFAULT_IMAGE;
     fi
 
     download_images $IMAGE
-    create_network poppernetwork 10.0.101.0/24 
+    create_network ansiblenodesnetwork 10.0.101.0/24 
 
     for i in $(eval echo "{1..$1}") 
     do
