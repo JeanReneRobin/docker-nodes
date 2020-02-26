@@ -141,7 +141,7 @@ function pop {
         else
             create_container node$i 10.0.101.${i}0 $IMAGE
             create_user node$i
-            echo "node$i ansible_host=10.0.101.${i}0 ansible_python_interpreter=/usr/bin/python3" >> /etc/ansible/inventory/docker-nodes.inventory
+            echo "node$i ansible_connection=docker ansible_python_interpreter=/usr/bin/python3" >> /etc/ansible/inventory/docker-nodes.inventory
             echo "node$i" >> /etc/ansible/inventory/docker-nodes-group.inventory
         fi
     done
