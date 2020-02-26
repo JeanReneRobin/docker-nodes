@@ -7,7 +7,7 @@ TXTBLUE=$(tput setaf 4)
 TXTBOLD=$(tput bold)
 TXTNORMAL=$(tput sgr0)
 
-DEFAULT_IMAGE='mabihan/docker-ubuntu1804-ansible:latest'
+DEFAULT_IMAGE='mabihan/docker-ubuntu1804-ansible'
     
 function display_message {
     MSG="$1"
@@ -56,7 +56,7 @@ function create_container {
     container_id="$(docker ps -a -q -f name=${container_name})"
     if [[ $container_id == "" ]]; then
         docker run -d -h "${container_name}" --name "${container_name}" --net ansiblenodesnetwork --ip "${container_ip}" --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro "${container_image}" >/dev/null 2>&1
-        display_message "Creating $container_name - $2" $?
+        display_message "Popped $container_name - $2" $?
     else
         is_running=$(docker inspect -f '{{.State.Running}}' $container_id)
         if [[ "$is_running" == "false" ]]; then
@@ -146,6 +146,7 @@ function create_user {
     echo "$USER ALL = (ALL) NOPASSWD: ALL" | docker exec -i $1 /bin/bash -c 'cat >> /etc/sudoers'
 
     IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $1)
+    ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$IP_ADDRESS" >/dev/null
     ssh -q $IP_ADDRESS exit
     display_message "Deploying SSH key" $?
 }
@@ -170,7 +171,7 @@ function show_description {
 
 function show_help {
     echo -e "${TXTBOLD}${TXTYELLOW}Usage:${TXTNORMAL}"
-    echo "  ./docker-nodes [command] [options]
+    echo "  ansible-nodes [command] [options]
     "
 
     echo -e "${TXTBOLD}${TXTYELLOW}Available Commands:${TXTNORMAL}
