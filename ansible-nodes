@@ -100,7 +100,14 @@ function delete_containers {
         rm /etc/ansible/inventory/docker-nodes.inventory
         display_message "Delete ansible inventory file" $?
     fi 
-    
+
+    if [ -f "/etc/ansible/inventory/docker-nodes-group.inventory" ]
+    then
+        rm /etc/ansible/inventory/docker-nodes-group.inventory
+        display_message "Delete ansible inventory group file" $?
+    fi
+
+
     for i in $(eval echo "{0..25}"); do
         if container_exists node$i; then
             docker rm --force node$i >/dev/null 2>&1
@@ -123,6 +130,8 @@ function pop {
     download_images $IMAGE
     create_network ansiblenodesnetwork 10.0.101.0/24 
 
+
+    echo "[ansible_nodes]" >> /etc/ansible/inventory/docker-nodes-group.inventory
     for i in $(eval echo "{1..$1}") 
     do
         if [ "$i" -gt 25 ]
@@ -133,6 +142,7 @@ function pop {
             create_container node$i 10.0.101.${i}0 $IMAGE
             create_user node$i
             echo "node$i ansible_host=10.0.101.${i}0 ansible_python_interpreter=/usr/bin/python3" >> /etc/ansible/inventory/docker-nodes.inventory
+            echo "node$i" >> /etc/ansible/inventory/docker-nodes-group.inventory
         fi
     done
 }
@@ -164,7 +174,11 @@ function show_title {
 function show_description {
 
     echo -e "${TXTBOLD}${TXTYELLOW}Description:${TXTNORMAL}"
-    echo "  A shell script used to deploy and manage local docker containers."
+
+    echo "  A shell script used to deploy and manage local docker containers for Ansible development."
+    echo "  Each container will be added into a local Ansible inventory.
+    "
+
     echo -e "  Default image : ${TXTBOLD}${TXTBLUE}$DEFAULT_IMAGE${TXTNORMAL}
     "
 }
