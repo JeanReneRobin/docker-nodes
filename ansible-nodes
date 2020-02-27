@@ -101,7 +101,7 @@ function container_exists {
 # 
 function download_images {
     docker pull $1 >/dev/null 2>&1
-    display_message "Nodes image downloaded" $RESULT
+    display_message "Nodes image downloaded $1" $RESULT
 }
 
 # delete_containers

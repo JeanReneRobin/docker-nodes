@@ -20,6 +20,30 @@ Available Commands:
   stop        		Exit and clean existing environnement
 ```
 
+### Prerequisites
+- SSH credentials (use `ssh-keygen`)
+- SSH config as follows :
+```bash
+Host *
+    ForwardAgent yes
+    User <YOU USERNAME>
+    IdentityFile ~/.ssh/id_rsa
+    IdentitiesOnly yes
+    StrictHostKeyChecking no
+    ConnectTimeout 20
+```
+
+### Setup
+![](public/ansible-nodes.gif)
+
+- Clone repo : 
+  - `mkdir -p ~/git && cd ~/git && git clone https://github.com/mabihan/ansible-nodes.git`
+- Add alias to your `.bashrc` or `.zshrc` : 
+  - `echo "alias ansible-nodes=~/git/ansible-nodes/ansible-nodes" >> ~/.bashrc`
+  - `echo "alias ansible-nodes=~/git/ansible-nodes/ansible-nodes" >> ~/.zshrc`
+- Reload your configuration :
+  - `source ~/.bashrc`
+  - `source ~/.zshrc`
 ### Example
 
 Create 5 nodes : 
@@ -64,7 +88,7 @@ node4 | SUCCESS => {
     "changed": false,
     "ping": "pong"
 }
-
 ```
+
 ### Credits
 https://github.com/Nani-o/ansible101
