@@ -90,5 +90,8 @@ node4 | SUCCESS => {
 }
 ```
 
+### Docker image
+Default docker image : https://github.com/mabihan/docker-ubuntu1804-ansible
+
 ### Credits
 https://github.com/Nani-o/ansible101
