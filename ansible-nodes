@@ -69,13 +69,26 @@ function create_container {
 }
 
 function list {
-    NUMBER=$(docker ps --format '{{.Names}}\t{{.Image}}' | grep node | wc -l);
+    
+    STATUS=$(docker inspect --format='{{.Name}}    {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} {{.State}}' $(sudo docker ps -aq)  | grep node | cut -c 2- | awk '{print $1,$2,$3}' |  awk -F "{" '{print $1$2}')
+
+    NUMBER=$(echo $STATUS | grep -o 'node' | wc -l);
+
     if [[ "$NUMBER" == "0" ]]; then
         echo -e "${TXTBOLD}${TXTYELLOW}$NUMBER nodes found${TXTNORMAL}"
     else
         echo -e "${TXTBOLD}${TXTGREEN}$NUMBER nodes found${TXTNORMAL}"
-        docker inspect --format='{{.Name}}    {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(sudo docker ps -aq) | grep node | cut -c 2-
+        echo "
+name  state   ip"
+        docker inspect --format='{{.Name}} {{.State}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(sudo docker ps -aq)  | grep node  | cut -c 2- | awk '{print $1,$2,$13}' |  awk -F "{" '{print $1$2}' | sort
+
+        STOPPED=$(echo $STATUS | grep exited)
+        if [[ "$STOPPED" != "" ]]; then
+            echo -e "\n${TXTBOLD}${TXTYELLOW}If a node is exited, it can be started with command docker start <nodeId>.${TXTNORMAL}"
+        fi
     fi
+
+    exit
 }
 
 # container_exists
@@ -101,7 +114,7 @@ function container_exists {
 # 
 function download_images {
     docker pull $1 >/dev/null 2>&1
-    display_message "Nodes image downloaded $1" $?
+    display_message "Downloading $1" $?
 }
 
 # delete_containers
@@ -109,30 +122,52 @@ function download_images {
 # Delete created containers and Ansible inventory files
 # 
 function delete_containers {
-
-    if [ -f "/etc/ansible/inventory/docker-nodes.inventory" ]
-    then 
-        rm /etc/ansible/inventory/docker-nodes.inventory
-        display_message "Delete ansible inventory file" $?
-    fi 
-
-    if [ -f "/etc/ansible/inventory/docker-nodes-group.inventory" ]
+    
+    if [ -z "$1" ]
     then
-        rm /etc/ansible/inventory/docker-nodes-group.inventory
-        display_message "Delete ansible inventory group file" $?
-    fi
+        if [ -f "/etc/ansible/inventory/docker-nodes.inventory" ]
+        then 
+            rm /etc/ansible/inventory/docker-nodes.inventory
+            display_message "Removing ansible inventory file" $?
+        fi 
 
-
-    for i in $(eval echo "{0..25}"); do
-        if container_exists node$i; then
-            docker rm --force node$i >/dev/null 2>&1
-            display_message "Delete node$i" $?
+        if [ -f "/etc/ansible/inventory/docker-nodes-group.inventory" ]
+        then
+            rm /etc/ansible/inventory/docker-nodes-group.inventory
+            display_message "Removing ansible inventory group file" $?
         fi
-    done
-    NETWORK=$(docker network ls | grep ansiblenodesnetwork)
-    if [[ "$NETWORK" != "" ]]; then
-        docker network rm ansiblenodesnetwork >/dev/null 2>&1
-        display_message "Delete network" $?
+
+
+        for i in $(eval echo "{0..25}"); do
+            ssh-keygen -f "$HOME/.ssh/known_hosts" -R "node$i" 1>/dev/null 2>/dev/null
+            if container_exists node$i; then
+                docker rm --force node$i >/dev/null 2>&1
+                display_message "Removing node$i" $?
+            fi
+        done
+        NETWORK=$(docker network ls | grep ansiblenodesnetwork)
+        if [[ "$NETWORK" != "" ]]; then
+            docker network rm ansiblenodesnetwork >/dev/null 2>&1
+            display_message "Removing network" $?
+        fi
+    else    
+        cat /etc/ansible/inventory/docker-nodes.inventory | grep -v $1 > /etc/ansible/inventory/docker-nodes.inventory.tmp
+        mv /etc/ansible/inventory/docker-nodes.inventory.tmp /etc/ansible/inventory/docker-nodes.inventory
+        display_message "Removing ansible inventory file" $?
+
+        cat /etc/ansible/inventory/docker-nodes-group.inventory | grep -v $1 > /etc/ansible/inventory/docker-nodes-group.inventory.tmp
+        mv /etc/ansible/inventory/docker-nodes-group.inventory.tmp /etc/ansible/inventory/docker-nodes-group.inventory
+
+        display_message "Removing ansible inventory group file" $?
+
+        ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$1" 1>/dev/null 2>/dev/null
+        if container_exists $1; then
+            docker rm --force $1 >/dev/null 2>&1
+            display_message "Removing $1" $?
+        else
+            echo -e "[${TXTBOLD}${TXTYELLOW}!!${TXTNORMAL}] - Container $1 does not exist"
+        fi
+
     fi
 }
 
@@ -202,7 +237,7 @@ function create_user {
     # Validate SSH connection
     IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $1)
     
-    ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$IP_ADDRESS" 1>/dev/null 2>/dev/null
+    ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$1" 1>/dev/null 2>/dev/null
     ssh -q $IP_ADDRESS exit
 
     # Display status message
@@ -255,14 +290,14 @@ function show_help {
     echo "  ansible-nodes [command] [options]
     "
 
-    echo -e "${TXTBOLD}${TXTYELLOW}Available Commands:${TXTNORMAL}
-  help        		Dispaly this message
-  pop [n] [i]      	Deploy n containers using i image. 25 nodes maximum.
-  attach [node]         Connect to a node shell
-  list                  List containers managed by docker-nodes
-  download    		Download dockers images
-  delete      		Delete containers
-  stop        		Exit and clean existing environnement"
+    echo -e "${TXTBOLD}${TXTYELLOW}Available commands and options:${TXTNORMAL}
+  help        		        Dispaly this message.
+  pop [n] [i|optionnal]      	Deploy n containers using default image, or a specific image if specified. 25 nodes maximum.
+  attach [node]                 Connect to a node shell.
+  list                          List containers managed by docker-nodes.
+  download    		        Download dockers images.
+  delete [node|optionnal]       Delete all containers, or a specific container if specified.
+  stop        		        Exit and clean existing environnement."
 }
 
 is_binary_present docker
@@ -279,7 +314,7 @@ elif [[ "$ACTION" == "attach" ]]; then
 elif [[ "$ACTION" == "list" ]]; then
     list
 elif [[ "$ACTION" == "delete" ]]; then
-    delete_containers
+    delete_containers $2
 elif [[ "$ACTION" == "stop" ]]; then
     stop_containers
 elif [[ "$ACTION" == "download" ]]; then
